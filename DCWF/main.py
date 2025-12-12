@@ -23,6 +23,7 @@ from dotmap import DotMap
 from util.circle_loss import *
 from sklearn.model_selection import ParameterGrid
 
+# 设置随机种子
 def setup_seed(seed):
      torch.manual_seed(seed)
      torch.cuda.manual_seed_all(seed)
@@ -38,13 +39,13 @@ def read_conf(file):
     return dict(cf['default'])
 
 
-
+# 读取 .npz 中存储的特征和标签
 def loadData(fpath):
     train = np.load(fpath,allow_pickle=True).item()
     train_X ,train_y = train['feature'], train['label']
     return train_X, train_y
 
-
+# 实现了一个简单的 EarlyStopping，防止训练过拟合，用于 train_base()
 class EarlyStopping():
     """
     Early stopping to stop the training when the loss does not improve after
@@ -115,9 +116,14 @@ def is_valid_mixture(mixture):
         for model in inner_comb:
             assert model in ['dir', 'time', 'metadata']
 
-
+# 训练阶段 3：train_novel()，对于新类别（novel class）做少样本分类。
 def train_novel( model,num_classes,source_domain,dataset,shot,include=None):
-    """Train and validate model."""
+    """Train and validate model.
+    加载 meta 训练后的模型 DF
+    只训练一个线性分类器：clf = nn.Linear(2560, num_classes)
+    训练 support set（shot 样本）
+    评估 query set
+    """
     args = DotMap()
     args.gpu = 0 
     epochs = 500
@@ -173,9 +179,12 @@ def get_gradient(module, grad_input, grad_output):
     # print('梯度:', grad_output)
     pass
 
+# 训练阶段 2：train_meta()，对 DF 的 SE attention 模块 做元优化
 def train_meta( model,num_classes,dataset,shot,include=None):
-    """Train and validate model."""
-
+    """Train and validate model.
+    只训练 attention 模块，不动 backbone
+    学习如何在不同 domain 少样本情况下提取有用特征"""
+     
     args = DotMap()
     args.gpu = 0 
     epochs = 500
@@ -226,10 +235,14 @@ def train_meta( model,num_classes,dataset,shot,include=None):
     train_time_end = time.time()
     print('Total training time: %f' % (train_time_end - train_time_start))
 
-
+# 训练阶段 1：基于 CircleLoss 的 metric learning，使用的 DF模型，也就是文章里的预训练
 def train_base(model,m,gamma,source_domain):
-    """Train and validate model."""
-
+    """Train and validate model.
+     加载训练数据：get_base_dataloader(source_domain)
+     单独使用 CircleLoss 训练 DF 网络（不训练分类器）
+     EarlyStopping 控制停止
+     训练结果：输出一个预训练特征提取器：./pre_trained_model/finish_model_{m}_{gamma}_{source_domain}.pt"""
+     
     early = EarlyStopping(512)
     train_time_start = time.time()
 
@@ -283,6 +296,10 @@ def train_base(model,m,gamma,source_domain):
 
     print('Total training time: %f' % (train_time_end - train_time_start))
 
+""" 计算 accuracy
+计算 TPR/FPR/F1（通过 get_matrix()）
+输出 mean TPR, FPR, F1
+"""
 def validation_novel(model,cls,criterion,dataloader):
     losses = AverageMeter('Loss', ':.4e')
     acc = AverageMeter('Acc@1', ':6.2f')
@@ -398,6 +415,11 @@ source_domain = 'AWF_775'
 
 
 #ablation [meta,calibration]
+""" 最后的代码是为了跑消融实验：
+1.加载基础模型
+2.元训练（train_meta）
+3.少样本训练（train_novel）
+"""
 for dataset,num_class in zip(['tor_100w_2500tr'],\
                              [100]):
     print('dataset',dataset)
