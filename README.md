@@ -10,7 +10,7 @@ This repository contains the source code implementation of the paper "Few-shot W
 
 **DF-95** : [Deep Fingerprinting: Undermining Website Fingerprinting Defenses with Deep Learning ](https://github.com/deep-fingerprinting/df)
 
-**AWF775是在DF中给出的**
+**AWF775是在TF中给出的**
 
 ## Directory Structure
 
